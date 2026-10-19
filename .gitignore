@@ -1,5 +1,16 @@
+# Virtual environments
 .venv/
+
+# Secrets
 backend/.env
+
+# Python
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Runtime candidate data
+backend/uploads/
+
+# Raw evaluation runtime logs
+backend/evaluation/runs/*.log
