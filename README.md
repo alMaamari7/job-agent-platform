@@ -1,615 +1,581 @@
-# Profiling Agent
+# Job Agent Platform
 
-An evidence-grounded AI profiling system that converts heterogeneous candidate sources into a structured, reusable Candidate Context.
+AI-powered multi-agent platform for candidate profiling, job matching, and application support.
 
-The current implementation focuses on the **source-processing stage**: ingesting authorized candidate sources, extracting source-level facts, preserving context and contribution boundaries, and preparing structured information for later evidence and profile synthesis.
+The project is currently focused on building a controlled **Candidate Profiling system** that transforms heterogeneous candidate sources such as CVs, documents, and GitHub repositories into structured, reviewable candidate information.
 
-## Overview
+The core architectural principle is:
 
-The Profiling Agent is designed to build a reusable candidate representation from sources such as:
+> **AI decides what to do. Python controls how it is executed.**
 
-- CVs and resumes
-- GitHub repositories
-- project documentation
-- thesis material
-- certificates
-- text and document files
-- additional authorized candidate sources
+---
 
-The system uses a staged pipeline:
+## Current Project Scope
+
+The long-term platform is intended to support several stages of the job-search process:
 
 ```text
-Authorized Candidate Sources
+Candidate Sources
         ↓
-Source Processing
+Candidate Profiling
         ↓
-Evidence Processing
+Job Search
         ↓
-Capability Synthesis
+Job Analysis & Matching
         ↓
-Candidate Context
+Application Preparation
 ```
 
-The current development focus is the **Source Processing** stage.
+The current implementation is focused primarily on the **Candidate Profiling** layer.
 
-## Core Goal
-
-The system aims to create a candidate profile that is:
-
-- evidence-grounded
-- source-traceable
-- reusable across downstream workflows
-- independent of a specific job vacancy
-- explicit about uncertainty
-- careful about contribution and ownership
-- resistant to unsupported claims and hallucinations
-
-The resulting Candidate Context is intended to support later systems such as job matching, application analysis, CV adaptation, and candidate development.
-
-## Design Principles
-
-The profiling workflow follows semantic integrity rules such as:
+The profiling architecture is designed as a multi-agent system:
 
 ```text
-project ≠ employment
-academic work ≠ employment
-prototype ≠ production
-participation ≠ leadership
-tool usage ≠ mastery
-public repository ≠ proof of the full private product
-declared claim ≠ independently verified evidence
+ProfilingManager
+│
+├── SourceManager
+│   └── SourceAgent
+│
+├── EvidenceManager        # planned
+│   └── EvidenceAgent      # planned
+│
+└── ProfileManager         # planned
+    └── ProfileAgent       # planned
 ```
 
-The system should preserve the original context of every claim rather than upgrading it into a stronger interpretation.
+At the current stage, the Source Processing workflow is the most developed part.
 
-## Current Architecture
+---
+
+# Why This Architecture?
+
+LLMs are useful for semantic reasoning, but they should not independently control workflow state.
+
+The system therefore separates responsibilities.
+
+### AI agents are responsible for
+
+- interpreting candidate sources;
+- identifying candidate facts;
+- evaluating result quality;
+- identifying uncertainty;
+- deciding whether a result requires improvement;
+- producing structured review feedback.
+
+### Python infrastructure is responsible for
+
+- request IDs;
+- profiling run IDs;
+- agent IDs;
+- execution IDs;
+- expected output types;
+- execution attempts;
+- execution lineage;
+- source authorization;
+- output validation;
+- lifecycle transitions;
+- result persistence;
+- rework limits.
+
+This creates a controlled agent workflow instead of relying on free-form autonomous execution.
+
+---
+
+# Candidate Source Processing
+
+Candidate sources may currently include:
+
+- local candidate documents;
+- CVs;
+- GitHub repositories.
+
+A source is represented as a `CandidateSource`.
+
+Each SourceAgent execution processes exactly one authorized source.
+
+Example:
 
 ```text
 CandidateSource
-      ↓
-ProfilingManager
-      ↓
-process_candidate_source(source_id)
-      ↓
+    ↓
+SourceManager
+    ↓
+ExecutionRequestDraft
+    ↓
+Python-controlled ExecutionRequest
+    ↓
+ExecutionCoordinator
+    ↓
 SourceAgent
-      ↓
-ReadCandidateSource
-      ↓
-DocumentReader / GitHubReader
-      ↓
+    ↓
 ParsedSourceResult
 ```
 
-### ProfilingManager
+---
 
-The `ProfilingManager` controls the profiling workflow.
+# Controlled Execution Requests
 
-Current responsibilities include:
+The AI manager does not create complete execution requests.
 
-- processing all authorized candidate sources
-- invoking source processing independently for each source
-- preserving successful results
-- continuing when another source encounters a recoverable failure
-- enforcing the Source Processing stage boundary
-- preventing premature evidence or profile synthesis
-
-The manager does not perform source interpretation itself.
-
-## SourceAgent
-
-The `SourceAgent` processes exactly one authorized `CandidateSource` per execution.
-
-Its responsibility is:
+It only produces an `ExecutionRequestDraft` containing:
 
 ```text
-SOURCE → SOURCE-LEVEL FACTS
+agent_type
+input
 ```
 
-The SourceAgent extracts and preserves:
+Example:
 
-- facts
-- source context
-- candidate contribution
-- methods
-- tools and resources
-- stakeholders
-- outcomes
-- provenance
-- uncertainty
+```json
+{
+  "agent_type": "SOURCE_AGENT",
+  "input": {
+    "source_id": "source-123"
+  }
+}
+```
 
-It must not perform:
-
-- cross-source reconciliation
-- candidate-wide evidence synthesis
-- capability synthesis
-- job matching
-- profile generation
-
-## Independent Source Processing
-
-A central architectural decision is that multiple sources are not bundled into one SourceAgent execution.
+Python then creates the actual `ExecutionRequest` and controls:
 
 ```text
-ProfilingManager
-    ├── SourceAgent(CV)
-    │       ↓
-    │   ParsedSourceResult
-    │
-    └── SourceAgent(GitHub)
+request_id
+run_id
+execution mode
+expected_output
+```
+
+This prevents the AI from inventing technical execution metadata.
+
+---
+
+# Persistent Agent Instances
+
+The system distinguishes between:
+
+```text
+AgentInstance
+```
+
+and:
+
+```text
+AgentExecutionInstance
+```
+
+An `AgentInstance` represents a persistent worker.
+
+One agent may execute multiple times:
+
+```text
+AgentInstance
+agent-001
+│
+├── execution exec-001
+│
+└── execution exec-002
+```
+
+Each `AgentExecutionInstance` represents one concrete attempt and stores information such as:
+
+```text
+execution_id
+request
+attempt
+previous_execution_id
+input_snapshot
+result
+manager_review
+```
+
+This makes execution history and rework traceable.
+
+---
+
+# SourceAgent
+
+The SourceAgent performs source-level interpretation.
+
+Its job is to produce a structured:
+
+```text
+ParsedSourceResult
+```
+
+containing information such as:
+
+- candidate facts;
+- context;
+- candidate contribution;
+- methods;
+- tools and resources;
+- stakeholders;
+- outcomes;
+- provenance;
+- uncertainties.
+
+The SourceAgent does **not** approve its own result.
+
+It also does not control execution IDs, attempts, or lifecycle state.
+
+---
+
+# Source Snapshots
+
+When a source is processed for the first time, the exact content used by the SourceAgent is captured as an:
+
+```text
+input_snapshot
+```
+
+This snapshot is stored with the execution.
+
+Example:
+
+```text
+AgentExecutionInstance
+├── input_snapshot
+├── result
+└── manager_review
+```
+
+If the result later requires improvement, the same source snapshot can be reused instead of reading the external source again.
+
+This is particularly useful for large GitHub repositories and reduces repeated:
+
+- source reads;
+- tool calls;
+- token usage;
+- processing time.
+
+---
+
+# Manager Review
+
+Every successful worker result enters:
+
+```text
+NEEDS_MANAGER_REVIEW
+```
+
+The worker cannot set its own approval status.
+
+The SourceManager reviews the result and chooses:
+
+```text
+APPROVED_BY_MANAGER
+```
+
+or:
+
+```text
+NEEDS_IMPROVEMENT
+```
+
+Reviews are structured using `ManagerReview`.
+
+Example:
+
+```json
+{
+  "status": "NEEDS_IMPROVEMENT",
+  "feedback_items": [
+    {
+      "issue_type": "UNSUPPORTED_CONTRIBUTION",
+      "description": "The result infers sole authorship without sufficient evidence.",
+      "required_change": "Remove the unsupported authorship claim."
+    }
+  ]
+}
+```
+
+Each feedback item contains:
+
+```text
+issue_type
+description
+required_change
+```
+
+---
+
+# Controlled Review Tool
+
+Managers do not directly modify execution state.
+
+Reviews are submitted through a controlled tool:
+
+```text
+submit_manager_review
+```
+
+The manager provides:
+
+```text
+execution_id
+ManagerReview
+```
+
+Python validates the review and applies it to the exact execution.
+
+This prevents the manager from approving results merely through free-form text.
+
+---
+
+# Rework Workflow
+
+When the SourceManager decides:
+
+```text
+NEEDS_IMPROVEMENT
+```
+
+the coordinator starts a controlled rework.
+
+The same persistent agent receives:
+
+```text
+previous input snapshot
++
+previous result
++
+manager feedback
+```
+
+The agent then produces a revised result.
+
+Example:
+
+```text
+exec-001
+├── result V1
+└── manager review
+    └── NEEDS_IMPROVEMENT
             ↓
-        ParsedSourceResult
+        same AgentInstance
+            ↓
+exec-002
+├── previous_execution_id = exec-001
+├── attempt = 2
+├── same input snapshot
+└── result V2
 ```
 
-This provides failure isolation. If one source fails, successful results from other sources remain available.
-
-## Candidate Sources
-
-Candidate sources are represented through a `CandidateSource` model.
-
-Current source types include:
+The revised result again receives:
 
 ```text
-FILE
-GITHUB
-URL
+NEEDS_MANAGER_REVIEW
 ```
 
-Typical metadata includes:
+and must be reviewed independently.
 
-- `source_id`
-- `source_type`
-- original filename
-- stored filename
-- path
-- URL
-- content type
-- creation timestamp
+Rework attempts are bounded to prevent uncontrolled execution loops.
 
-Candidate sources are authorized before they are passed into the profiling workflow.
+---
 
-## Source Access
-
-Source access is abstracted from AI reasoning.
+# Current Source Processing Workflow
 
 ```text
-ReadCandidateSource
-    ├── DocumentReader
-    └── GitHubReader
-```
-
-### DocumentReader
-
-Currently supports document-oriented candidate sources such as:
-
-- PDF
-- DOCX
-- TXT
-- Markdown
-
-### GitHubReader
-
-The GitHub reader retrieves repository content for authorized repositories.
-
-Authenticated GitHub access is supported through application configuration.
-
-The reader is intentionally separate from the SourceAgent so repository access remains a deterministic source-access concern rather than an AI-agent responsibility.
-
-## ParsedSourceResult
-
-The SourceAgent returns one source-level result per CandidateSource.
-
-Conceptually:
-
-```text
-ParsedSourceResult
-├── source_id
-├── source_type
-├── status
-├── facts
-├── uncertainties
-└── processing_notes
-```
-
-A fact can include:
-
-```text
-statement
-fact_type
-context
-contribution
-methods
-tools_or_resources
-stakeholders
-outcomes
-source_locator
-```
-
-The result represents only what can be established from the current source.
-
-It does not yet represent candidate-wide evidence strength.
-
-## Source Processing Status
-
-Current source-level statuses include:
-
-```text
-PARSED
-PARTIALLY_PARSED
-UNAVAILABLE
-UNSUPPORTED_FORMAT
-FAILED_TO_PARSE
-```
-
-The workflow is designed to preserve partial success instead of collapsing the entire profiling run when one source fails.
-
-## Candidate Context Model
-
-The future profiling output is defined around a reusable Candidate Context.
-
-Planned core artifacts include:
-
-```text
-PROFILE.md
-SOURCE_INDEX.md
-EVIDENCE_INDEX.md
-CAPABILITY_MAP.md
-LIMITATIONS.md
-profile/
-```
-
-Candidate-wide support levels are expected to include:
-
-```text
-CORROBORATED
-SUPPORTED
-CANDIDATE_STATED
-UNCERTAIN
-UNKNOWN
-```
-
-These support levels belong to later evidence processing and are intentionally not assigned by the SourceAgent.
-
-## Agent Decomposition
-
-The profiling system is being developed as a staged multi-agent workflow.
-
-```text
-ProfilingManager
+SourceManager
+    ↓
+ExecutionRequestDraft
+    ↓
+ExecutionRequestFactory
+    ↓
+ExecutionRequest
+    ↓
+ExecutionPlan
+    ↓
+ExecutionCoordinator
+    ↓
+AgentInstance
+    ↓
+AgentExecutionInstance
     ↓
 SourceAgent
     ↓
-EvidenceAgent
+ReadCandidateSource
     ↓
-ProfileAgent
-```
-
-### Current
-
-- ProfilingManager
-- SourceAgent
-- source readers
-- candidate source ingestion
-- source-level fact extraction
-- source-level uncertainty handling
-
-### Planned
-
-- EvidenceAgent
-- cross-source reconciliation
-- evidence support classification
-- capability synthesis
-- Candidate Context generation
-- profile validation
-
-## Evaluation-Driven Development
-
-The project uses explicit evaluation as part of the architecture process.
-
-```text
-Hypothesis
+input_snapshot
     ↓
-Implementation
+ParsedSourceResult
     ↓
-Evaluation
+AgentRunOutput
     ↓
-Findings
+ExecutionCoordinator
     ↓
-Architectural Decision
+AgentExecutionResult
     ↓
-Regression Test
+NEEDS_MANAGER_REVIEW
+    ↓
+SourceManager
+    ↓
+ManagerReview
+    ↓
+submit_manager_review
+    ↓
+APPROVED_BY_MANAGER
+        or
+NEEDS_IMPROVEMENT
+    ↓
+controlled rework
 ```
 
-Evaluation artifacts are stored separately from runtime logs.
+---
+
+# Project Structure
+
+Relevant backend structure:
 
 ```text
-evaluation/
-├── EVALUATION_PROTOCOL.md
-├── EVAL-001.md
-├── EVAL-002.md
-└── runs/
+backend/
+└── app/
+    └── ai/
+        └── agents/
+            └── profilling_agent/
+                ├── agents/
+                │   ├── profiling_manager/
+                │   ├── source_ai/
+                │   │   ├── source_manager/
+                │   │   └── source_agent/
+                │   └── moduls/
+                │
+                ├── schema/
+                ├── services/
+                └── tools/
 ```
 
-## Evaluation Framework
-
-Evaluations are divided into two dimensions:
+Important components include:
 
 ```text
-System Evaluation = 30%
-AI Evaluation     = 70%
+SourceManager
+SourceAgent
+ExecutionCoordinator
+ExecutionRequestFactory
+AgentInstance
+AgentExecutionInstance
+AgentExecutionResult
+ManagerReview
+ExecuteExecutionPlanTool
+SubmitManagerReviewTool
+ReadCandidateSource
 ```
 
-### System Evaluation
+---
 
-Examples:
+# Technology Stack
 
-- orchestration correctness
-- source isolation
-- stage boundaries
-- failure isolation
-- authorization
-- retry behavior
-- runtime stability
-- logging
-- efficiency
-
-### AI Evaluation
-
-Examples:
-
-- factual accuracy
-- completeness
-- context preservation
-- contribution preservation
-- provenance
-- uncertainty handling
-- hallucination avoidance
-- contract compliance
-
-Critical failures cannot be compensated for by a high numeric score.
-
-## EVAL-002 Result
-
-The current Source Processing architecture was evaluated with:
-
-```text
-1 CV
-1 GitHub repository
-```
-
-Observed behavior:
-
-```text
-CV
-→ independent SourceAgent execution
-→ PARSED
-
-GitHub
-→ independent SourceAgent execution
-→ transient timeout
-→ retry
-→ PARSED
-```
-
-The evaluation confirmed:
-
-- independent source execution
-- failure isolation
-- successful result preservation
-- authenticated GitHub access
-- correct Source Processing stage boundary
-- strong context preservation
-
-Current evaluation result:
-
-```text
-PASS_WITH_FINDINGS
-```
-
-Architectural decision:
-
-```text
-KEEP_WITH_CHANGES
-```
-
-Important remaining findings include:
-
-- deterministic structured-output validation
-- temporal reasoning correctness
-- ground-truth AI evaluation
-- retry-policy hardening
-- GitHub processing efficiency
-
-## Evaluation Philosophy
-
-The project does not aim to optimize every metric indefinitely.
-
-A component is considered ready to move forward when:
-
-- critical gates pass
-- system behavior is stable enough for downstream use
-- AI quality is sufficiently strong
-- no unresolved defect creates unacceptable downstream risk
-
-Optimization is prioritized according to impact rather than score alone.
-
-## Ground-Truth Evaluation
-
-Future AI evaluations will use manually reviewed reference datasets.
-
-The intended process is:
-
-```text
-Source Material
-      ↓
-Profiling Agent Output
-      ↓
-Independent Baseline Output
-      ↓
-Manual Adjudication
-      ↓
-Canonical Ground Truth
-```
-
-An independent general-purpose AI system may be used as a comparison baseline or Ground-Truth Assistant, but its output is not automatically treated as ground truth.
-
-Ground truth must remain traceable to the original authorized source.
-
-## Technology Stack
-
-Current backend technologies include:
+Backend technologies currently include:
 
 - Python
 - FastAPI
 - Pydantic v2
 - smolagents
-- Hugging Face Inference
-- DeepInfra
-- GitHub API
-- dotenv-based configuration
+- Hugging Face model providers
+- python-dotenv
+- Uvicorn
 
-Current LLM setup:
+The architecture is designed so AI models can later be replaced without rewriting the execution lifecycle.
 
-```text
-deepseek-ai/DeepSeek-V4-Flash-0731
-```
+---
 
-## Project Structure
+# Evaluation-Driven Development
 
-Current profiling-related structure:
+The profiling architecture is developed through repeated execution tests and evaluation reports.
 
-```text
-backend/
-├── app/
-│   ├── ai/
-│   │   └── agents/
-│   │       └── profilling_agent/
-│   │           ├── agents/
-│   │           │   ├── profiling_manager/
-│   │           │   └── source_agent/
-│   │           └── tools/
-│   │               └── source_access/
-│   │                   └── readers/
-│   ├── core/
-│   ├── models/
-│   └── services/
-│
-├── evaluation/
-│   ├── EVALUATION_PROTOCOL.md
-│   ├── EVAL-001.md
-│   ├── EVAL-002.md
-│   └── runs/
-│
-├── .env
-└── run_dev.ps1
-```
+Evaluation is used to detect problems such as:
 
-> Note: the current package path uses the existing spelling `profilling_agent`.
+- malformed AI outputs;
+- incorrect tool schemas;
+- result loss after partial failure;
+- unsupported candidate claims;
+- missing review transitions;
+- uncontrolled retries;
+- excessive source context.
 
-## Configuration
+Observed failures are then used to improve the architecture and agent contracts.
 
-Environment variables are loaded from `.env`.
-
-Example:
-
-```env
-HF_TOKEN=your_huggingface_token
-GITHUB_TOKEN=your_github_token
-```
-
-Secrets must never be committed to Git.
-
-The repository should include `.env` in `.gitignore`.
-
-## Running the Backend
-
-From the backend directory:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-.\run_dev.ps1
-```
-
-The development script configures UTF-8 handling and starts the FastAPI application through Uvicorn.
-
-## Profiling Flow
-
-Typical development flow:
+Evaluation reports are stored under:
 
 ```text
-1. Add candidate sources
-2. Store authorized CandidateSource metadata
-3. Start profiling
-4. ProfilingManager loads sources
-5. Each source is processed independently
-6. SourceAgent returns ParsedSourceResult
-7. Successful results are preserved
-8. Workflow stops at the current Source Processing boundary
+backend/evaluation/
 ```
 
-The profiling endpoint currently initiates this workflow through:
+---
+
+# Documentation
+
+Additional architecture documentation is available under:
 
 ```text
-POST /profiling/start
+docs/
 ```
 
-## Current Development Priorities
-
-The Source Processing architecture is considered stable enough to retain.
-
-### P0 — ParsedSourceResult Validation
-
-Introduce deterministic validation before downstream agents consume SourceAgent output.
-
-### P0 — Temporal and Semantic Correctness
-
-Prevent incorrect temporal uncertainty and similar semantic interpretation errors.
-
-### P1 — Ground-Truth Evaluation Set
-
-Create manually reviewed benchmark cases for AI evaluation.
-
-### P2 — Retry Policy
-
-Move retry classification from LLM-driven behavior toward explicit deterministic control.
-
-### P2 — GitHub Processing Efficiency
-
-Reduce unnecessary repository payload, token consumption, and timeout risk.
-
-## Roadmap
+In particular:
 
 ```text
-Source Processing
-    ✅ architecture established
-    ✅ independent source execution
-    ✅ CV processing
-    ✅ authenticated GitHub processing
-    ✅ evaluation protocol
-    ✅ EVAL-002
-
-Structured Output Hardening
-    ⏳
-
-Ground-Truth Dataset
-    ⏳
-
-EvidenceAgent
-    ⏳
-
-Capability Synthesis
-    ⏳
-
-ProfileAgent
-    ⏳
-
-Candidate Context Validation
-    ⏳
+docs/AGENT_EXECUTION_ARCHITECTURE.md
 ```
 
-## Status
+contains a more detailed description of the execution lifecycle and agent architecture.
 
-The Profiling Agent is currently an **active development and evaluation project**.
+---
 
-The Source Processing stage is functional and has passed its current architectural evaluation with findings.
+# Current Status
 
-Later evidence synthesis and Candidate Context generation are not yet considered complete.
+The project is under active development.
+
+### Implemented or substantially developed
+
+- candidate-source ingestion;
+- file source processing;
+- GitHub source processing;
+- SourceManager;
+- SourceAgent;
+- structured source extraction;
+- controlled execution requests;
+- execution plans;
+- deterministic ExecutionCoordinator;
+- persistent agent instances;
+- execution history;
+- source snapshot preservation;
+- manager review;
+- structured review feedback;
+- bounded rework;
+- execution failure preservation.
+
+### Planned / not yet complete
+
+- EvidenceManager;
+- EvidenceAgent;
+- evidence consolidation;
+- ProfileManager;
+- ProfileAgent;
+- final candidate profile generation;
+- job-search agents;
+- job matching;
+- application generation;
+- production persistence for agent executions;
+- production frontend;
+- complete end-to-end test coverage.
+
+The project should therefore currently be considered an **active architecture and workflow implementation**, not a finished autonomous job-application product.
+
+---
+
+# Design Principles
+
+The project currently follows five core principles:
+
+```text
+AI decides WHAT.
+
+Python controls HOW.
+
+Managers review QUALITY.
+
+Workers perform DOMAIN WORK.
+
+Infrastructure controls STATE.
+```
+
+The goal is controlled AI autonomy: allowing agents to reason and improve their work while keeping execution state, identity, history, validation, and lifecycle deterministic and inspectable.
