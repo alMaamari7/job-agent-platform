@@ -2,221 +2,196 @@
 
 ## 1. Purpose
 
-This contract defines the data boundary of the ProfilingManager.
+This contract defines the input, output, and data integrity requirements of the `ProfilingManager`.
 
-The manager coordinates profiling stages but does not replace their domain-specific reasoning.
+The ProfilingManager coordinates the Candidate Profiling workflow without performing specialized semantic processing.
 
----
+All reported outcomes must be supported by actual phase results or valid existing artifacts.
 
-## 2. Manager Input
+## 2. Input Contract
 
-Minimum conceptual input:
-
-```yaml
-profiling_request:
-  authorized_sources:
-    - ...
-  existing_candidate_context: null | ...
-  requested_mode: null | INITIAL_PROFILE_BUILD | UPDATE_EXISTING_PROFILE
-```
-
-The application may add technical metadata where needed.
-
----
-
-## 3. Internal Workflow State
-
-The ProfilingManager should maintain explicit workflow state.
+The ProfilingManager receives one `ProfilingRequest`.
 
 Conceptual structure:
 
 ```yaml
-run_id:
-mode:
-status:
-current_stage:
-
 authorized_sources:
-  - ...
+  - CandidateSource
 
-source_result:
-  status:
-  parsed_sources:
-    - ...
-  errors:
-    - ...
+requested_mode: null | INITIAL_PROFILE_BUILD | UPDATE_EXISTING_PROFILE
 
-evidence_result:
-  status:
-  evidence_records:
-    - ...
-  unresolved_contradictions:
-    - ...
-  errors:
-    - ...
+existing_candidate_context: null | CandidateContext
 
-profile_result:
-  status:
-  candidate_context:
-  material_limitations:
-    - ...
-  errors:
-    - ...
-
-validation_result:
-  passed:
-  structural_errors:
-    - ...
-  semantic_errors:
-    - ...
+existing_profiling_state: null | ProfilingState
 ```
 
-Exact implementation may later use Pydantic models and database persistence.
+Requirements:
 
----
+- Use only authorized Candidate Sources.
+- Resolve exactly one execution mode.
+- Preserve valid existing artifacts during updates.
+- Do not assume that existing artifacts are valid without checking their applicability.
 
-## 4. Required Stage Contracts
+## 3. Phase Execution Request
 
-### Source Processing
-
-Input:
-
-```text
-AuthorizedSourceSet
-```
-
-Output:
-
-```text
-SourceRegistry
-ParsedSourceFacts
-SourceProcessingStatus
-```
-
----
-
-### Evidence Processing
-
-Input:
-
-```text
-SourceRegistry
-ParsedSourceFacts
-```
-
-Output:
-
-```text
-EvidenceRecords
-UnresolvedContradictions
-EvidenceProcessingStatus
-```
-
----
-
-### Profile Processing
-
-Input:
-
-```text
-SourceRegistry
-EvidenceRecords
-UnresolvedContradictions
-```
-
-Output:
-
-```text
-CandidateContextDraft
-ProfileProcessingStatus
-```
-
-The draft must include the required Candidate Context structure:
-
-```text
-PROFILE.md
-SOURCE_INDEX.md
-EVIDENCE_INDEX.md
-CAPABILITY_MAP.md
-LIMITATIONS.md
-profile/
-```
-
----
-
-### Validation
-
-Input:
-
-```text
-CandidateContextDraft
-SourceRegistry
-EvidenceRecords
-```
-
-Output:
+For each required profiling phase, the ProfilingManager produces a `PhaseExecutionRequest`.
 
 ```yaml
-passed:
+request_id: "..."
+phase: SOURCE_PROCESSING | EVIDENCE_PROCESSING | PROFILE_PROCESSING
+responsible_manager: "..."
+input_artifacts:
+  - "..."
+expected_output: "..."
+```
+
+Each request must:
+
+- Identify one profiling phase and its responsible manager.
+- Include the required available inputs.
+- Specify the expected phase output.
+- Respect upstream dependencies.
+
+A request represents planned work, not completed execution.
+
+## 4. Phase Execution Result
+
+The ProfilingManager consumes actual `PhaseExecutionResult` objects.
+
+```yaml
+request_id: "..."
+phase: "..."
+
+execution_status: COMPLETED | FAILED | TIMEOUT | CANCELLED
+
+output: null | PhaseResult
+error: null | "..."
+```
+
+Requirements:
+
+- Every result must correspond to a known phase request.
+- Phase outputs must satisfy their respective contracts.
+- A completed execution does not automatically mean the phase succeeded.
+- Missing or invalid results must never be treated as successful processing.
+
+Never fabricate phase results or execution outcomes.
+
+## 5. Phase Result Contracts
+
+Each profiling phase produces its own specialized result.
+
+| Phase | Responsible manager | Expected output |
+|---|---|---|
+| Source Processing | SourceManager | `SourceProcessingOutcome` |
+| Evidence Processing | EvidenceManager | `EvidenceProcessingResult` |
+| Candidate Representation | ProfileManager | `ProfileProcessingResult` |
+
+Phase results must preserve relevant artifacts, processing status, errors, and limitations.
+
+The ProfilingManager passes valid upstream artifacts to downstream phases without modifying their semantic content.
+
+## 6. Validation Contract
+
+Candidate Context validation is required before successful finalization.
+
+Conceptual result:
+
+```yaml
+passed: true | false
 errors:
-  - ...
+  - "..."
 warnings:
-  - ...
+  - "..."
 ```
 
----
+Validation must establish compliance with the governing Candidate Context Standard and Output Contract.
 
-## 5. Manager Output
+The required Candidate Context structure is:
 
-The ProfilingManager returns:
+```text
+candidate_context/
+├── PROFILE.md
+├── SOURCE_INDEX.md
+├── EVIDENCE_INDEX.md
+├── CAPABILITY_MAP.md
+├── LIMITATIONS.md
+└── profile/
+    └── <candidate-specific sections>.md
+```
+
+Validation must not be reported as successful without an actual validation result.
+
+## 7. Output Contract
+
+The ProfilingManager returns one `ProfilingOutcome`.
+
+Conceptual structure:
 
 ```yaml
-candidate_context:
-  ...
+status: COMPLETE | COMPLETE_WITH_LIMITATIONS | INCOMPLETE | BLOCKED
+
+candidate_context: null | CandidateContext
+
+phase_results:
+  source_processing: null | SourceProcessingOutcome
+  evidence_processing: null | EvidenceProcessingResult
+  profile_processing: null | ProfileProcessingResult
+
+validation_result: null | ValidationResult
+
+pending_requests:
+  - PhaseExecutionRequest
+
+unresolved_issues:
+  - phase: "..."
+    reason: "..."
 
 run_summary:
-  mode:
-  status:
-  sources_processed:
-  sources_unavailable:
-  evidence_records_created:
-  evidence_records_updated:
-  capabilities_created:
-  capabilities_updated:
-  dynamic_sections_created:
-  dynamic_sections_updated:
-  material_limitations:
+  mode: "..."
+  completed_phases: []
+  failed_phases: []
+  pending_phases: []
+  limitations: []
 ```
 
----
+The outcome must accurately represent completed, pending, failed, and blocked work.
 
-## 6. Completion Contract
+If execution is unavailable, return the pending requests and unresolved workflow state instead of fabricated phase results.
 
-Possible final statuses:
+## 8. Completion Contract
 
-```text
-COMPLETE
-COMPLETE_WITH_LIMITATIONS
-INCOMPLETE_MISSING_REQUIRED_SOURCES
-INCOMPLETE_UNRESOLVED_INTEGRITY_ISSUE
-```
+| Status | Meaning |
+|---|---|
+| `COMPLETE` | Required phases completed, Candidate Context validated, and no material limitations remain. |
+| `COMPLETE_WITH_LIMITATIONS` | A validated, usable Candidate Context exists with explicitly documented limitations. |
+| `INCOMPLETE` | Required processing or validation remains unfinished or unresolved. |
+| `BLOCKED` | Required work cannot currently proceed. |
 
-`COMPLETE` requires successful validation and no material unresolved integrity issue.
+Neither `COMPLETE` nor `COMPLETE_WITH_LIMITATIONS` is permitted without successful validation.
 
-`COMPLETE_WITH_LIMITATIONS` requires a usable Candidate Context with explicitly documented material limitations.
+An incomplete or blocked result must explain why the workflow cannot be finalized.
 
-An incomplete status must preserve the reason for incompleteness.
+## 9. Integrity Rules
 
----
+The following invariants are mandatory:
 
-## 7. Contract Boundary
+1. **Authorization:** Every processed source belongs to the authorized source set.
+2. **Execution authenticity:** Execution requests are never presented as completed executions.
+3. **Phase traceability:** Every execution result corresponds to a known request.
+4. **Dependency integrity:** Downstream phases receive valid required upstream artifacts.
+5. **Result preservation:** Successful work is not discarded because another phase fails.
+6. **Validation integrity:** Final completion requires an actual successful validation result.
+7. **Semantic boundary:** The ProfilingManager never creates source facts, evidence, capabilities, or profile content itself.
 
-The manager's contract ends at:
+## 10. Contract Boundary
 
-```text
-Validated Candidate Context
-+
-Profiling Run Summary
-```
+**Input:** `ProfilingRequest`
 
-It does not include job matching, application configuration, CV tailoring, ATS scoring, salary decisions, application submission, or other downstream actions.
+**Intermediate:** `PhaseExecutionRequest`, actual `PhaseExecutionResult`, and specialized phase outcomes.
+
+**Output:** `ProfilingOutcome`, including the validated Candidate Context when available.
+
+The contract excludes job matching, ATS scoring, CV tailoring, salary strategy, application decisions, and other downstream activities.
+
+**Final rule: Report only outcomes supported by actual execution and validation evidence.**

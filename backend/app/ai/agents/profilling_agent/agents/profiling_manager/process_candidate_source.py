@@ -1,6 +1,6 @@
 from smolagents import Tool
 
-from app.ai.agents.profilling_agent.agents.source_agent.source_agent import SourceAgent
+from app.ai.agents.profilling_agent.agents.source_ai.source_agent.source_agent import SourceAgent
 
 
 
