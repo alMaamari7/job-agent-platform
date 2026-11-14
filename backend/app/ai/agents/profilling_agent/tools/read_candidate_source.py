@@ -3,13 +3,12 @@
 from pathlib import Path
 
 from smolagents import Tool
-from app.schemas.candidate_source import (
+from app.ai.agents.profilling_agent.schema.candidate_source import (
     CandidateSource,
 )
 from app.enums.candidate_source import SourceType
 from app.ai.agents.profilling_agent.tools.source_access.readers.document_reader import DocumentReader
 from app.ai.agents.profilling_agent.tools.source_access.readers.github_reader import GitHubReader
-
 
 
 
@@ -48,6 +47,13 @@ class ReadCandidateSource(Tool):
         self.document_reader = DocumentReader()
         self.github_reader = GitHubReader()
 
+        # -------------------------------------------------
+        # Last successfully read source snapshot
+        # -------------------------------------------------
+
+        self.last_source_id: str | None = None
+        self.last_snapshot: str | None = None
+
         super().__init__()
 
     def forward(
@@ -62,6 +68,10 @@ class ReadCandidateSource(Tool):
                 f"Unknown candidate source: {source_id}"
             )
 
+        # -------------------------------------------------
+        # Read source
+        # -------------------------------------------------
+
         if source.source_type == SourceType.FILE:
 
             if not source.file_path:
@@ -70,11 +80,11 @@ class ReadCandidateSource(Tool):
                     "has no file path."
                 )
 
-            return self.document_reader.read(
+            content = self.document_reader.read(
                 source.file_path
             )
 
-        if source.source_type == SourceType.GITHUB:
+        elif source.source_type == SourceType.GITHUB:
 
             if not source.source_url:
                 raise ValueError(
@@ -82,11 +92,25 @@ class ReadCandidateSource(Tool):
                     "has no source URL."
                 )
 
-            return self.github_reader.read(
+            content = self.github_reader.read(
                 source.source_url
             )
 
-        raise ValueError(
-            f"Unsupported candidate source type: "
-            f"{source.source_type}"
-        )
+        else:
+            raise ValueError(
+                f"Unsupported candidate source type: "
+                f"{source.source_type}"
+            )
+
+        # -------------------------------------------------
+        # Store exact source snapshot used by the agent
+        # -------------------------------------------------
+
+        self.last_source_id = source_id
+        self.last_snapshot = content
+
+        # -------------------------------------------------
+        # Return source content to the AI agent
+        # -------------------------------------------------
+
+        return content
