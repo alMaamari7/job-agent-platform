@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 
 
-from app.services.candidate_source_service import CandidateSourceService
+from app.ai.agents.profilling_agent.services.candidate_source_service import CandidateSourceService
 from app.ai.agents.profilling_agent.services.profiling_service import ProfilingService
 
 

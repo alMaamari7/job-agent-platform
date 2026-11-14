@@ -1,11 +1,10 @@
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 from urllib.parse import urlparse
 from fastapi import UploadFile
 import json
-from app.schemas.candidate_source import CandidateSource
+from app.ai.agents.profilling_agent.schema.candidate_source import CandidateSource
 from app.enums.candidate_source import SourceType
-
 
 UPLOAD_DIR = Path("uploads/candidate_sources")
 
@@ -178,3 +177,30 @@ class CandidateSourceService:
                 []
             )
         ]
+
+
+
+
+    def get_source_by_id(
+        self,
+        source_id: UUID | str,
+    ) -> CandidateSource | None:
+        """
+        Return exactly one CandidateSource by its source_id.
+
+        Args:
+            source_id:
+                The unique identifier of the CandidateSource.
+
+        Returns:
+            The matching CandidateSource if found.
+            Otherwise None.
+        """
+
+        sources = self.get_sources()
+
+        for source in sources:
+            if str(source.source_id) == str(source_id):
+                return source
+
+        return None

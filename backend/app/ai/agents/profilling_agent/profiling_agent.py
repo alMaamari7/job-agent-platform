@@ -3,7 +3,7 @@ from smolagents import ToolCallingAgent
 
 from app.ai.providers.huggingface import get_huggingface_model
 
-from app.schemas.candidate_source import CandidateSource
+from app.ai.agents.profilling_agent.schema.candidate_source import CandidateSource
 from app.enums.candidate_source import SourceType
 from app.ai.agents.profilling_agent.tools.read_candidate_source import  ReadCandidateSource
 

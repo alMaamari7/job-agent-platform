@@ -1,7 +1,9 @@
-from app.services.candidate_source_service import CandidateSourceService
-from app.ai.agents.profilling_agent.profiling_agent import ProfilingAgent
-from app.ai.agents.profilling_agent.agents.profiling_manager.profiling_manager import ProfilingManager
-
+from app.ai.agents.profilling_agent.services.candidate_source_service import (
+    CandidateSourceService,
+)
+from app.ai.agents.profilling_agent.agents.profiling_manager.profiling_manager import (
+    ProfilingManager,
+)
 
 
 class ProfilingService:
@@ -14,21 +16,22 @@ class ProfilingService:
 
     def start_profiling(self) -> str:
 
-        # 1. Gespeicherte Quellen abrufen
+        # 1. Gespeicherte Candidate Sources laden
         sources = self.source_service.get_sources()
 
-        # 2. Prüfen, ob Quellen vorhanden sind
+        # 2. Sicherstellen, dass mindestens eine Source vorhanden ist
         if not sources:
             raise ValueError(
                 "No candidate sources available."
             )
 
-        # 3. Profiling-Agent erstellen
+        # 3. ProfilingManager erstellen
         manager = ProfilingManager(
-            candidate_sources=sources
+            candidate_sources=sources,
+            candidate_source_service=self.source_service,
         )
 
-        # 4. Profilanalyse starten
+        # 4. Candidate Profiling starten
         result = manager.run()
 
         return result

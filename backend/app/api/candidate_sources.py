@@ -1,7 +1,7 @@
 from fastapi import APIRouter, File, UploadFile
 
-from app.schemas.candidate_source import CandidateSource, CandidateUrlRequest
-from app.services.candidate_source_service import CandidateSourceService
+from app.ai.agents.profilling_agent.schema.candidate_source import CandidateSource, CandidateUrlRequest
+from app.ai.agents.profilling_agent.services.candidate_source_service import CandidateSourceService
 
 
 
